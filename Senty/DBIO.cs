@@ -3,54 +3,44 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Data;
-using System.Data.SqlClient;
+using System.Data.OleDb;
 
 namespace Senty
 {
-	public static class DBIO
+	class DBIO
 	{
-		public static SqlConnection NewConn
+		public static OleDbConnection NewAccessConn
 		{
 			get
 			{
-				return new SqlConnection(new SqlConnectionStringBuilder { DataSource = ".", UserID = "", Password = "" }.ConnectionString);
+				return new OleDbConnection(System.Configuration.ConfigurationManager.ConnectionStrings["SentyConnectionString"].ConnectionString);
 			}
 		}
 
-		//public static DataTable ExecuteOracleSelectCommand(string commStr)
-		//{
-		//	//OracleDataAdapter oda = new OracleDataAdapter(commStr, NewOraConn);
-		//	//DataTable dt = new DataTable(commStr);
-		//	//oda.Fill(dt);
-		//	//return dt;
-		//	OracleCommand comm = new OracleCommand(commStr, NewOraConn);
-		//	return ExecuteOracleSelectCommand(comm);
-		//}
-
 		/// <summary>
-		/// Execute Oracle Select Command
+		/// Execute Access Select Command
 		/// </summary>
-		/// <param name="comm">can only be string or OracleCommand</param>
+		/// <param name="comm">can only be string or AccessCommand</param>
 		/// <returns></returns>
-		public static DataTable ExecuteSelectCommand(object comm)
+		public static DataTable ExecuteAccessSelectCommand(object comm)
 		{
-			SqlCommand cmd = MakeCommand(comm);
-			SqlDataAdapter oda = new SqlDataAdapter(cmd);
+			OleDbCommand cmd = MakeCommand(comm);
+			OleDbDataAdapter oda = new OleDbDataAdapter(cmd);
 			DataTable dt = new DataTable(cmd.CommandText);
 			oda.Fill(dt);
 			return dt;
 		}
 
 		/// <summary>
-		/// Execute Oracle NonQuery Command
+		/// Execute Access NonQuery Command
 		/// </summary>
-		/// <param name="commStr">can only be string or OracleCommand</param>
+		/// <param name="commStr">can only be string or AccessCommand</param>
 		/// <returns></returns>
-		public static int ExecuteNonQueryCommand(object comm)
+		public static int ExecuteAccessNonQueryCommand(object comm)
 		{
-			SqlCommand cmd = MakeCommand(comm);
+			OleDbCommand cmd = MakeCommand(comm);
 			int resultCount = 0;
-			using (cmd.Connection = NewConn)
+			using (cmd.Connection = NewAccessConn)
 			{
 				cmd.Connection.Open();
 				resultCount = cmd.ExecuteNonQuery();
@@ -60,15 +50,15 @@ namespace Senty
 		}
 
 		/// <summary>
-		/// Execute Oracle Scalar Command
+		/// Execute Access Scalar Command
 		/// </summary>
-		/// <param name="comm">can only be string or OracleCommand</param>
+		/// <param name="comm">can only be string or AccessCommand</param>
 		/// <returns></returns>
-		public static object ExecuteScalarCommand(object comm)
+		public static object ExecuteAccessScalarCommand(object comm)
 		{
-			SqlCommand cmd = MakeCommand(comm);
+			OleDbCommand cmd = MakeCommand(comm);
 			object resultObj;
-			using (cmd.Connection = NewConn)
+			using (cmd.Connection = NewAccessConn)
 			{
 				cmd.Connection.Open();
 				resultObj = cmd.ExecuteScalar();
@@ -77,33 +67,33 @@ namespace Senty
 			return resultObj;
 		}
 
-		private static SqlCommand MakeCommand(object comm)
+		private static OleDbCommand MakeCommand(object comm)
 		{
-			SqlCommand cmd = comm as SqlCommand;
+			OleDbCommand cmd = comm as OleDbCommand;
 			if (comm is string)
 			{
-				cmd = new SqlCommand((string)comm, NewConn);
+				cmd = new OleDbCommand((string)comm, NewAccessConn);
 			}
-			else if (!(comm is SqlCommand))
+			else if (!(comm is OleDbCommand))
 			{
 				throw (new Exception("Unknown comm.GetType()"));
 			}
 			if (cmd.Connection == null)
 			{
-				cmd.Connection = NewConn;
+				cmd.Connection = NewAccessConn;
 			}
 			return cmd;
 		}
 
 		/// <summary>
-		/// Execute Oracle Update By Table Name As Command
+		/// Execute Access Update By Table Name As Command
 		/// </summary>
 		/// <param name="dt"></param>
 		/// <returns></returns>
-		public static int ExecuteUpdate(DataTable dt)
+		public static int ExecuteAccessUpdate(DataTable dt)
 		{
-			SqlDataAdapter oda = new SqlDataAdapter(dt.TableName, NewConn);
-			SqlCommandBuilder ocb = new SqlCommandBuilder(oda);
+			OleDbDataAdapter oda = new OleDbDataAdapter(dt.TableName, NewAccessConn);
+			OleDbCommandBuilder ocb = new OleDbCommandBuilder(oda);
 			return oda.Update(dt);
 		}
 	}

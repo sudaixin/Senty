@@ -12,24 +12,24 @@ namespace Senty
 
 		public static void Load(T[] array)
 		{
-			IDObject idObj = typeof(T).GetIDColumn();
+			IDObject idObj = typeof(T).GetIDProperty();
 			if (idObj == null) throw new Exception("ID column not exists");
-			Load(array, idObj.FldInfo);
+			Load(array, idObj.pptInfo);
 		}
 
 		public static void Load(T[] array, string keyField)
 		{
-			FieldInfo fi = typeof(T).GetField(keyField);
-			if (fi == null) throw new Exception("keyField not exists");
-			Load(array, fi);
+			PropertyInfo pi = typeof(T).GetProperty(keyField);
+			if (pi == null) throw new Exception("keyField not exists");
+			Load(array, pi);
 		}
 
-		public static void Load(T[] array, FieldInfo fi)
+		public static void Load(T[] array, PropertyInfo pi)
 		{
 			_PoolDic = new Dictionary<string, T>();
 			foreach (T tObj in array)
 			{
-				_PoolDic.Add(fi.GetValue(tObj) as string, tObj);
+				_PoolDic.Add(pi.GetValue(tObj, null) as string, tObj);
 			}
 		}
 

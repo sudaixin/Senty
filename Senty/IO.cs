@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Reflection;
 using System.Data;
-using System.Data.SqlClient;
+using System.Data.OleDb;
 
 namespace Senty
 {
@@ -37,24 +37,25 @@ namespace Senty
 
 		public static T[] Read(ReadCommand cmd)
 		{
-			SqlCommand ocmd = new SqlCommand(cmd.CommandText);
+			OleDbCommand ocmd = new OleDbCommand(cmd.CommandText);
 			foreach (var param in cmd.Parameters.Get())
 			{
 				if (param.Value is string[])
 				{
+					throw new Exception("此处未完成");
 					string[] valueList = param.Value as string[];
 					string newParamName = "", paramName = param.ParamName;
 					for (int i = 0; i < valueList.Length; i++)
 					{
 						string paramNamei = paramName + i.ToString() + "_";
-						newParamName += "@" + paramNamei + ",";
-						ocmd.Parameters.Add("@" + paramNamei, SqlDbType.Char).Value = valueList[i];
+						newParamName += ":" + paramNamei + ",";
+						ocmd.Parameters.Add(paramNamei, OleDbType.Char).Value = valueList[i];
 					}
-					ocmd.CommandText = ocmd.CommandText.Replace("@" + paramName, newParamName.TrimEnd(','));
+					ocmd.CommandText = ocmd.CommandText.Replace(":" + paramName, newParamName.TrimEnd(','));
 				}
 				else
 				{
-					ocmd.Parameters.Add("@" + param.ParamName, SqldbTypeDic.Get(param.Value.GetType())).Value = param.Value;
+					ocmd.Parameters.Add(param.ParamName, AccessTypeDic.Get(param.Value.GetType())).Value = param.Value;
 				}
 			}
 			return Read(ocmd);
@@ -66,23 +67,23 @@ namespace Senty
 		/// <typeparam name="T">Domain.T classes</typeparam>
 		/// <param name="cmd">OracleCommand only</param>
 		/// <returns>T[]</returns>
-		private static T[] Read(SqlCommand cmd)
+		private static T[] Read(OleDbCommand cmd)
 		{
 			Type type = typeof(T);
 			if (!cmd.CommandText.Contains("from"))
 			{
 				cmd.CommandText = type.GetSelectString() + " " + cmd.CommandText;
 			}
-			DataTable dt = DBIO.ExecuteSelectCommand(cmd);
+			DataTable dt = DBIO.ExecuteAccessSelectCommand(cmd);
 			int rowCount = dt.Rows.Count;
 			T[] objList = (T[])Array.CreateInstance(type, rowCount);
 			for (int i = 0; i < rowCount; i++)
 			{
 				objList[i] = Activator.CreateInstance<T>();
 			}
-			foreach (FieldInfo fi in type.GetFields())
+			foreach (PropertyInfo pi in type.GetProperties())
 			{
-				DbInfo df = fi.GetDbInfo();
+				DbInfo df = pi.GetDbInfo();
 				if (df.LoadFromDataset)
 				{
 					if (dt.Columns.Contains(df.DbColumnName))
@@ -94,7 +95,7 @@ namespace Senty
 							{
 								valueObj = null;
 							}
-							fi.SetValue(objList[i], valueObj);
+							pi.SetValue(objList[i], valueObj, null);
 						}
 					}
 				}
@@ -109,7 +110,7 @@ namespace Senty
 			else return default(T);
 		}
 
-		public static T ReadOne(SqlCommand cmd)
+		public static T ReadOne(OleDbCommand cmd)
 		{
 			T[] ts = Read(cmd);
 			if (ts.Length > 0) return ts[0];
@@ -119,9 +120,9 @@ namespace Senty
 		public static T ReadByID(string id)
 		{
 			Type type = typeof(T);
-			IDObject idObj = type.GetIDColumn();
-			SqlCommand cmd = new SqlCommand(type.GetSelectString() + " where " + idObj.DbColumnName + "=@id");
-			cmd.Parameters.Add("@id", SqldbTypeDic.Get(idObj.FldInfo.FieldType)).Value = id;
+			IDObject idObj = type.GetIDProperty();
+			OleDbCommand cmd = new OleDbCommand(type.GetSelectString() + " where " + idObj.DbColumnName + "=@id");
+			cmd.Parameters.Add("@id", AccessTypeDic.Get(idObj.pptInfo.PropertyType)).Value = id;
 			return ReadOne(cmd);
 		}
 
@@ -130,22 +131,22 @@ namespace Senty
 			int arrayLength = objArray.Length;
 			if (arrayLength < 1) return null;
 			Type objType = typeof(T);
-			using (SqlConnection conn = DBIO.NewConn)
+			using (OleDbConnection conn = DBIO.NewAccessConn)
 			{
-				IDObject idObj = objType.GetIDColumn();
-				SqlCommand cmd = conn.CreateCommand();
+				IDObject idObj = objType.GetIDProperty();
+				OleDbCommand cmd = conn.CreateCommand();
 				cmd.CommandText = objType.GetInsertString();
 				string columnStr = "(";
 				string valuesStr = " values(";
-				FieldInfo[] fis = objType.GetFields();
-				foreach (FieldInfo fi in fis)
+				PropertyInfo[] pis = objType.GetProperties();
+				foreach (PropertyInfo pi in pis)
 				{
-					DbInfo df = fi.GetDbInfo();
+					DbInfo df = pi.GetDbInfo();
 					if (df.InsertIntoDb)
 					{
 						columnStr += df.DbColumnName + ",";
-						valuesStr += "@" + fi.Name + ",";
-						cmd.Parameters.Add("@" + fi.Name, SqldbTypeDic.Get(fi.FieldType));
+						valuesStr += "@" + pi.Name + ",";
+						cmd.Parameters.Add("@" + pi.Name, AccessTypeDic.Get(pi.PropertyType));
 					}
 				}
 				cmd.CommandText += columnStr.TrimEnd(',') + ")" + valuesStr.TrimEnd(',') + ")";
@@ -154,16 +155,16 @@ namespace Senty
 				{
 					foreach (T aObj in objArray)
 					{
-						SqlCommand idCmd = conn.CreateCommand();
+						OleDbCommand idCmd = conn.CreateCommand();
 						idCmd.Transaction = cmd.Transaction;
 						string newId = idObj.IDAttr.GetNewID(idCmd);
-						idObj.FldInfo.SetValue(aObj, newId);
-						foreach (FieldInfo fi in fis)
+						idObj.pptInfo.SetValue(aObj, newId, null);
+						foreach (PropertyInfo pi in pis)
 						{
-							DbInfo df = fi.GetDbInfo();
+							DbInfo df = pi.GetDbInfo();
 							if (df.InsertIntoDb)
 							{
-								cmd.Parameters["@" + fi.Name].Value = fi.GetValue(aObj);
+								cmd.Parameters["@" + pi.Name].Value = pi.GetValue(aObj, null);
 							}
 						}
 						cmd.ExecuteNonQuery();
@@ -188,34 +189,34 @@ namespace Senty
 			int arrayLength = objArray.Length;
 			if (arrayLength < 1) return null;
 			Type objType = typeof(T);
-			using (SqlConnection conn = DBIO.NewConn)
+			using (OleDbConnection conn = DBIO.NewAccessConn)
 			{
-				IDObject idObj = objType.GetIDColumn();
-				SqlCommand cmd = conn.CreateCommand();
+				IDObject idObj = objType.GetIDProperty();
+				OleDbCommand cmd = conn.CreateCommand();
 				cmd.CommandText = objType.GetUpdateString();
 				string cmdStr = " set ";
-				FieldInfo[] fis = objType.GetFields();
-				foreach (FieldInfo fi in fis)
+				PropertyInfo[] pis = objType.GetProperties();
+				foreach (PropertyInfo pi in pis)
 				{
-					DbInfo df = fi.GetDbInfo();
+					DbInfo df = pi.GetDbInfo();
 					if (df.InsertIntoDb && !df.ID)
 					{
-						cmdStr += df.DbColumnName + "=@" + fi.Name + ",";
+						cmdStr += df.DbColumnName + "=@" + pi.Name + ",";
 					}
-					cmd.Parameters.Add("@" + fi.Name, SqldbTypeDic.Get(fi.FieldType));
+					cmd.Parameters.Add("@" + pi.Name, AccessTypeDic.Get(pi.PropertyType));
 				}
-				cmd.CommandText += cmdStr.TrimEnd(',') + " where " + idObj.DbColumnName + "=@" + idObj.FldInfo.Name;
+				cmd.CommandText += cmdStr.TrimEnd(',') + " where " + idObj.DbColumnName + "=@" + idObj.pptInfo.Name;
 				conn.Open();
 				using (cmd.Transaction = conn.BeginTransaction(IsolationLevel.ReadCommitted))
 				{
 					foreach (T aObj in objArray)
 					{
-						foreach (FieldInfo fi in fis)
+						foreach (PropertyInfo pi in pis)
 						{
-							DbInfo df = fi.GetDbInfo();
+							DbInfo df = pi.GetDbInfo();
 							if (df.InsertIntoDb)
 							{
-								cmd.Parameters["@" + fi.Name].Value = fi.GetValue(aObj);
+								cmd.Parameters["@" + pi.Name].Value = pi.GetValue(aObj, null);
 							}
 						}
 						cmd.ExecuteNonQuery();
@@ -241,18 +242,18 @@ namespace Senty
 			if (arrayLength < 1) return 0;
 			int resultCount = 0;
 			Type objType = typeof(T);
-			using (SqlConnection conn = DBIO.NewConn)
+			using (OleDbConnection conn = DBIO.NewAccessConn)
 			{
-				IDObject idObj = objType.GetIDColumn();
-				SqlCommand cmd = conn.CreateCommand();
+				IDObject idObj = objType.GetIDProperty();
+				OleDbCommand cmd = conn.CreateCommand();
 				cmd.CommandText = objType.GetDeleteString() + " where " + idObj.DbColumnName + "=@id";
-				cmd.Parameters.Add("@id", SqlDbType.VarChar);
+				cmd.Parameters.Add("@id", OleDbType.VarChar);
 				conn.Open();
 				using (cmd.Transaction = conn.BeginTransaction(IsolationLevel.ReadCommitted))
 				{
 					foreach (T aObj in objArray)
 					{
-						cmd.Parameters["@id"].Value = idObj.FldInfo.GetValue(aObj);
+						cmd.Parameters["@id"].Value = idObj.pptInfo.GetValue(aObj, null);
 						resultCount += cmd.ExecuteNonQuery();
 					}
 					cmd.Transaction.Commit();

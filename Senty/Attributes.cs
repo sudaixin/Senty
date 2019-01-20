@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Data.SqlClient;
+using System.Data.OleDb;
 using System.Reflection;
 
 namespace Senty
@@ -32,13 +32,13 @@ namespace Senty
 	public class IDObject
 	{
 		public readonly IDAttribute IDAttr;
-		public readonly FieldInfo FldInfo;
-		public string DbColumnName { get { return FldInfo.GetDbInfo().DbColumnName; } }
+		public readonly PropertyInfo pptInfo;
+		public string DbColumnName { get { return pptInfo.GetDbInfo().DbColumnName; } }
 
-		public IDObject(IDAttribute idAttr, FieldInfo fi)
+		public IDObject(IDAttribute idAttr, PropertyInfo pi)
 		{
 			IDAttr = idAttr;
-			FldInfo = fi;
+			pptInfo = pi;
 		}
 	}
 
@@ -65,16 +65,29 @@ namespace Senty
 		{
 			IDSelectCommand = cmd;
 		}
+		public IDAttribute(bool guid)
+		{
+			GUID = guid;
+		}
 
 		public readonly string IDSelectCommand;
+		public readonly bool GUID = false;
 
-		public string GetNewID(SqlCommand cmd)
+		public string GetNewID(OleDbCommand cmd)
 		{
-			cmd.CommandText = IDSelectCommand;
-			string idStr = cmd.ExecuteScalar() as string;
-			if (string.IsNullOrEmpty(idStr))
+			string idStr;
+			if (GUID)
 			{
-				throw new Exception("未取得ID");
+				idStr = Guid.NewGuid().ToString("N");
+			}
+			else
+			{
+				cmd.CommandText = IDSelectCommand;
+				idStr = cmd.ExecuteScalar() as string;
+				if (string.IsNullOrEmpty(idStr))
+				{
+					throw new Exception("未取得ID");
+				}
 			}
 			return idStr;
 		}
@@ -84,11 +97,6 @@ namespace Senty
 			dbp.ID = true;
 			return dbp;
 		}
-
-		//public string GetNewID()
-		//{
-		//	return GetNewID(Pub.NewOraConn);
-		//}
 	}
 
 	public class NotDbColumnAttribute : DbPropertyAttribute
@@ -151,12 +159,11 @@ namespace Senty
 		public readonly bool InsertIntoDb = true;
 		public readonly bool NotDbColumn = false;
 		public readonly bool ID = false;
-		//public readonly FieldInfo FldInfo;
 
-		public DbInfo(FieldInfo fi)
+		public DbInfo(PropertyInfo pi)
 		{
-			DbProperty dbp = new DbProperty { DbColumnName = fi.Name, NotDbColumn = false, InsertIntoDb = true, InsertIntoDbSet = false, LoadFromDataset = true, LoadFromDatasetSet = false, ID = false };
-			foreach (Attribute attr in Attribute.GetCustomAttributes(fi))
+			DbProperty dbp = new DbProperty { DbColumnName = pi.Name, NotDbColumn = false, InsertIntoDb = true, InsertIntoDbSet = false, LoadFromDataset = true, LoadFromDatasetSet = false, ID = false };
+			foreach (Attribute attr in Attribute.GetCustomAttributes(pi))
 			{
 				if (attr is DbPropertyAttribute)
 				{
@@ -170,93 +177,4 @@ namespace Senty
 			InsertIntoDb = dbp.InsertIntoDb;
 		}
 	}
-
-	//public static class DomainExtensions
-	//{
-	//	public static void ForEach<T>(this T[] array, Action<T> action)
-	//	{
-	//		Array.ForEach(array, action);
-	//	}
-
-	//	public static DbInfo GetDbInfo(this FieldInfo fi)
-	//	{
-	//		return new DbInfo(fi);
-	//	}
-
-	//	public static IDObject GetIDColumn(this Type type)
-	//	{
-	//		foreach (FieldInfo fi in type.GetFields())
-	//		{
-	//			Attribute idAttr = Attribute.GetCustomAttribute(fi, typeof(IDAttribute));
-	//			if (idAttr != null)
-	//			{
-	//				return new IDObject((IDAttribute)idAttr, fi);
-	//			}
-	//		}
-	//		return null;
-	//	}
-
-	//	private static string GetTableName(Type type)
-	//	{
-	//		string preStr = type.Name;
-	//		TableNameAttribute tbAttr = (TableNameAttribute)Attribute.GetCustomAttribute(type, typeof(TableNameAttribute));
-	//		if (tbAttr != null)
-	//		{
-	//			preStr = tbAttr.TableName;
-	//		}
-	//		return preStr;
-	//	}
-
-	//	public static string GetSelectString(this Type type)
-	//	{
-	//		string preStr = GetTableName(type);
-	//		SelectAttribute sfAttr = (SelectAttribute)Attribute.GetCustomAttribute(type, typeof(SelectAttribute));
-	//		if (sfAttr != null)
-	//		{
-	//			preStr = sfAttr.FromString;
-	//		}
-	//		if (!preStr.Contains("from"))
-	//		{
-	//			preStr = "from " + preStr;
-	//		}
-	//		if (!preStr.Contains("select"))
-	//		{
-	//			preStr = "select * " + preStr;
-	//		}
-	//		return preStr;
-	//	}
-
-	//	public static string GetInsertString(this Type type)
-	//	{
-	//		string preStr = GetTableName(type);
-	//		preStr = "insert into " + preStr;
-	//		return preStr;
-	//	}
-
-	//	public static string GetUpdateString(this Type type)
-	//	{
-	//		string preStr = GetTableName(type);
-	//		preStr = "update " + preStr;
-	//		return preStr;
-	//	}
-
-	//	public static string GetDeleteString(this Type type)
-	//	{
-	//		string preStr = GetTableName(type);
-	//		preStr = "delete " + preStr;
-	//		return preStr;
-	//	}
-
-	//	public static void InvokeAfterUpdate(this Type type)
-	//	{
-	//		MethodInfo[] ms = type.GetMethods();
-	//		ms.ForEach(mi =>//foreach (MethodInfo mi in ms)
-	//		{
-	//			if (Attribute.GetCustomAttribute(mi, typeof(InvokeAfterUpdateAttribute)) != null)
-	//			{
-	//				mi.Invoke(null, null);
-	//			}
-	//		});
-	//	}
-	//}
 }

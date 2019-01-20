@@ -13,22 +13,32 @@ namespace Senty
 			Array.ForEach(array, action);
 		}
 
-		public static DbInfo GetDbInfo(this FieldInfo fi)
+		public static DbInfo GetDbInfo(this PropertyInfo pi)
 		{
-			return new DbInfo(fi);
+			return new DbInfo(pi);
 		}
 
-		public static IDObject GetIDColumn(this Type type)
+		public static IDObject GetIDProperty(this Type type)
 		{
-			foreach (FieldInfo fi in type.GetFields())
+			IDObject idObj = null;
+			foreach (PropertyInfo pi in type.GetProperties())
 			{
-				Attribute idAttr = Attribute.GetCustomAttribute(fi, typeof(IDAttribute));
+				Attribute idAttr = Attribute.GetCustomAttribute(pi, typeof(IDAttribute));
 				if (idAttr != null)
 				{
-					return new IDObject((IDAttribute)idAttr, fi);
+					idObj = new IDObject((IDAttribute)idAttr, pi);
+					break;
+				}
+				else
+				{
+					if (pi.Name.ToLower() == "id" && idObj == null)
+					{
+						idObj = new IDObject(new IDAttribute(), pi);
+					}
 				}
 			}
-			return null;
+			if (idObj == null) throw new Exception("id property not found!");
+			return idObj;
 		}
 
 		private static string GetTableName(Type type)
