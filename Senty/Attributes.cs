@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Data.OracleClient;
+using System.Data.SqlClient;
 using System.Reflection;
 
 namespace Senty
@@ -68,7 +68,7 @@ namespace Senty
 
 		public readonly string IDSelectCommand;
 
-		public string GetNewID(OracleCommand cmd)
+		public string GetNewID(SqlCommand cmd)
 		{
 			cmd.CommandText = IDSelectCommand;
 			string idStr = cmd.ExecuteScalar() as string;

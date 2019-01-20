@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Reflection;
 using System.Data;
-using System.Data.OracleClient;
+using System.Data.SqlClient;
 
 namespace Senty
 {
@@ -37,7 +37,7 @@ namespace Senty
 
 		public static T[] Read(ReadCommand cmd)
 		{
-			OracleCommand ocmd = new OracleCommand(cmd.CommandText);
+			SqlCommand ocmd = new SqlCommand(cmd.CommandText);
 			foreach (var param in cmd.Parameters.Get())
 			{
 				if (param.Value is string[])
@@ -47,14 +47,14 @@ namespace Senty
 					for (int i = 0; i < valueList.Length; i++)
 					{
 						string paramNamei = paramName + i.ToString() + "_";
-						newParamName += ":" + paramNamei + ",";
-						ocmd.Parameters.Add(paramNamei, OracleType.Char).Value = valueList[i];
+						newParamName += "@" + paramNamei + ",";
+						ocmd.Parameters.Add("@" + paramNamei, SqlDbType.Char).Value = valueList[i];
 					}
-					ocmd.CommandText = ocmd.CommandText.Replace(":" + paramName, newParamName.TrimEnd(','));
+					ocmd.CommandText = ocmd.CommandText.Replace("@" + paramName, newParamName.TrimEnd(','));
 				}
 				else
 				{
-					ocmd.Parameters.Add(param.ParamName, OracleTypeDic.Get(param.Value.GetType())).Value = param.Value;
+					ocmd.Parameters.Add("@" + param.ParamName, SqldbTypeDic.Get(param.Value.GetType())).Value = param.Value;
 				}
 			}
 			return Read(ocmd);
@@ -66,14 +66,14 @@ namespace Senty
 		/// <typeparam name="T">Domain.T classes</typeparam>
 		/// <param name="cmd">OracleCommand only</param>
 		/// <returns>T[]</returns>
-		private static T[] Read(OracleCommand cmd)
+		private static T[] Read(SqlCommand cmd)
 		{
 			Type type = typeof(T);
 			if (!cmd.CommandText.Contains("from"))
 			{
 				cmd.CommandText = type.GetSelectString() + " " + cmd.CommandText;
 			}
-			DataTable dt = DBIO.ExecuteOracleSelectCommand(cmd);
+			DataTable dt = DBIO.ExecuteSelectCommand(cmd);
 			int rowCount = dt.Rows.Count;
 			T[] objList = (T[])Array.CreateInstance(type, rowCount);
 			for (int i = 0; i < rowCount; i++)
@@ -109,7 +109,7 @@ namespace Senty
 			else return default(T);
 		}
 
-		public static T ReadOne(OracleCommand cmd)
+		public static T ReadOne(SqlCommand cmd)
 		{
 			T[] ts = Read(cmd);
 			if (ts.Length > 0) return ts[0];
@@ -120,36 +120,20 @@ namespace Senty
 		{
 			Type type = typeof(T);
 			IDObject idObj = type.GetIDColumn();
-			OracleCommand cmd = new OracleCommand(type.GetSelectString() + " where " + idObj.DbColumnName + "=:id");
-			cmd.Parameters.Add("id", OracleTypeDic.Get(idObj.FldInfo.FieldType)).Value = id;
+			SqlCommand cmd = new SqlCommand(type.GetSelectString() + " where " + idObj.DbColumnName + "=@id");
+			cmd.Parameters.Add("@id", SqldbTypeDic.Get(idObj.FldInfo.FieldType)).Value = id;
 			return ReadOne(cmd);
 		}
-
-		//private static Dictionary<Type, OracleType> _oracleTypeDic;
-		//public static Dictionary<Type, OracleType> OracleTypeDic
-		//{
-		//	get
-		//	{
-		//		if (_oracleTypeDic == null)
-		//		{
-		//			_oracleTypeDic = new Dictionary<Type, OracleType>();
-		//			_oracleTypeDic.Add(typeof(string), OracleType.VarChar);
-		//			_oracleTypeDic.Add(typeof(decimal), OracleType.Number);
-		//			_oracleTypeDic.Add(typeof(DateTime), OracleType.DateTime);
-		//		}
-		//		return _oracleTypeDic;
-		//	}
-		//}
 
 		public static T[] InsertArray(T[] objArray)
 		{
 			int arrayLength = objArray.Length;
 			if (arrayLength < 1) return null;
 			Type objType = typeof(T);
-			using (OracleConnection conn = DBIO.NewOraConn)
+			using (SqlConnection conn = DBIO.NewConn)
 			{
 				IDObject idObj = objType.GetIDColumn();
-				OracleCommand cmd = conn.CreateCommand();
+				SqlCommand cmd = conn.CreateCommand();
 				cmd.CommandText = objType.GetInsertString();
 				string columnStr = "(";
 				string valuesStr = " values(";
@@ -160,8 +144,8 @@ namespace Senty
 					if (df.InsertIntoDb)
 					{
 						columnStr += df.DbColumnName + ",";
-						valuesStr += ":" + fi.Name + ",";
-						cmd.Parameters.Add(fi.Name, OracleTypeDic.Get(fi.FieldType));
+						valuesStr += "@" + fi.Name + ",";
+						cmd.Parameters.Add("@" + fi.Name, SqldbTypeDic.Get(fi.FieldType));
 					}
 				}
 				cmd.CommandText += columnStr.TrimEnd(',') + ")" + valuesStr.TrimEnd(',') + ")";
@@ -170,7 +154,7 @@ namespace Senty
 				{
 					foreach (T aObj in objArray)
 					{
-						OracleCommand idCmd = conn.CreateCommand();
+						SqlCommand idCmd = conn.CreateCommand();
 						idCmd.Transaction = cmd.Transaction;
 						string newId = idObj.IDAttr.GetNewID(idCmd);
 						idObj.FldInfo.SetValue(aObj, newId);
@@ -179,7 +163,7 @@ namespace Senty
 							DbInfo df = fi.GetDbInfo();
 							if (df.InsertIntoDb)
 							{
-								cmd.Parameters[fi.Name].Value = fi.GetValue(aObj);
+								cmd.Parameters["@" + fi.Name].Value = fi.GetValue(aObj);
 							}
 						}
 						cmd.ExecuteNonQuery();
@@ -204,10 +188,10 @@ namespace Senty
 			int arrayLength = objArray.Length;
 			if (arrayLength < 1) return null;
 			Type objType = typeof(T);
-			using (OracleConnection conn = DBIO.NewOraConn)
+			using (SqlConnection conn = DBIO.NewConn)
 			{
 				IDObject idObj = objType.GetIDColumn();
-				OracleCommand cmd = conn.CreateCommand();
+				SqlCommand cmd = conn.CreateCommand();
 				cmd.CommandText = objType.GetUpdateString();
 				string cmdStr = " set ";
 				FieldInfo[] fis = objType.GetFields();
@@ -216,11 +200,11 @@ namespace Senty
 					DbInfo df = fi.GetDbInfo();
 					if (df.InsertIntoDb && !df.ID)
 					{
-						cmdStr += df.DbColumnName + "=:" + fi.Name + ",";
+						cmdStr += df.DbColumnName + "=@" + fi.Name + ",";
 					}
-					cmd.Parameters.Add(fi.Name, OracleTypeDic.Get(fi.FieldType));
+					cmd.Parameters.Add("@" + fi.Name, SqldbTypeDic.Get(fi.FieldType));
 				}
-				cmd.CommandText += cmdStr.TrimEnd(',') + " where " + idObj.DbColumnName + "=:" + idObj.FldInfo.Name;
+				cmd.CommandText += cmdStr.TrimEnd(',') + " where " + idObj.DbColumnName + "=@" + idObj.FldInfo.Name;
 				conn.Open();
 				using (cmd.Transaction = conn.BeginTransaction(IsolationLevel.ReadCommitted))
 				{
@@ -231,7 +215,7 @@ namespace Senty
 							DbInfo df = fi.GetDbInfo();
 							if (df.InsertIntoDb)
 							{
-								cmd.Parameters[fi.Name].Value = fi.GetValue(aObj);
+								cmd.Parameters["@" + fi.Name].Value = fi.GetValue(aObj);
 							}
 						}
 						cmd.ExecuteNonQuery();
@@ -257,18 +241,18 @@ namespace Senty
 			if (arrayLength < 1) return 0;
 			int resultCount = 0;
 			Type objType = typeof(T);
-			using (OracleConnection conn = DBIO.NewOraConn)
+			using (SqlConnection conn = DBIO.NewConn)
 			{
 				IDObject idObj = objType.GetIDColumn();
-				OracleCommand cmd = conn.CreateCommand();
-				cmd.CommandText = objType.GetDeleteString() + " where " + idObj.DbColumnName + "=:id";
-				cmd.Parameters.Add("id", OracleType.VarChar);
+				SqlCommand cmd = conn.CreateCommand();
+				cmd.CommandText = objType.GetDeleteString() + " where " + idObj.DbColumnName + "=@id";
+				cmd.Parameters.Add("@id", SqlDbType.VarChar);
 				conn.Open();
 				using (cmd.Transaction = conn.BeginTransaction(IsolationLevel.ReadCommitted))
 				{
 					foreach (T aObj in objArray)
 					{
-						cmd.Parameters["id"].Value = idObj.FldInfo.GetValue(aObj);
+						cmd.Parameters["@id"].Value = idObj.FldInfo.GetValue(aObj);
 						resultCount += cmd.ExecuteNonQuery();
 					}
 					cmd.Transaction.Commit();
