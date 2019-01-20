@@ -14,7 +14,7 @@ namespace Senty
 			get
 			{
 				OracleConnectionStringBuilder ocsb = new OracleConnectionStringBuilder();
-				ocsb.DataSource = "";
+				ocsb.DataSource = ".";
 				ocsb.UserID = "";
 				ocsb.Password = "";
 				return new OracleConnection(ocsb.ConnectionString);
